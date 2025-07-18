@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html>
+<body>
+	<input type="file" id="fileInput" />
+	<button onclick="startUpload()">Start Upload</button>
+	<div id="progress"></div>
+
+	<script>
+		const CHUNK_SIZE = 1024 * 1024; // 1MB 分片
+		let ws;
+		let file;
+		let fileID;
+		let totalChunks;
+		let uploadedChunks = new Set();
+
+		// 生成文件唯一标识（文件名+大小+哈希）
+		function generateFileID(file) {
+			return `${file.name}-${file.size}-${Date.now()}`;
+		}
+
+		// 连接WebSocket
+		function connectWS() {
+			ws = new WebSocket('ws://localhost:8080/upload');
+			console.log(ws.readyState)
+			//ws.onopen = () => ws.send("xxx") //console.log('WebSocket connected');
+			ws.onmessage = handleWSMessage;
+			ws.onerror = (err) => console.error('WebSocket error:', err);
+			ws.onclose = () => console.log('WebSocket closed');
+			
+		}
+
+		// 处理服务器消息
+		function handleWSMessage(event) {
+			const msg = JSON.parse(event.data);
+			switch (msg.type) {
+				case 'ack':
+					// 分片确认，继续上传下一个
+					const ack = msg.payload;
+					uploadedChunks.add(ack.chunk_index);
+					uploadNextChunk();
+					break;
+				case 'resume':
+					// 断点续传响应，从缺失的分片开始上传
+					const resume = msg.payload;
+					resume.received_chunks.forEach(idx => uploadedChunks.add(idx));
+					uploadNextChunk();
+					break;
+				case 'progress':
+					// 更新进度显示
+					const progress = msg.payload.progress.toFixed(2);
+					document.getElementById('progress').textContent = `Progress: ${progress}%`;
+					break;
+				case 'error':
+					console.error('Server error:', msg.payload.message);
+					break;
+			}
+		}
+
+		// 开始上传
+		function startUpload() {
+			file = document.getElementById('fileInput').files[0];
+			if (!file) return alert('Select a file');
+
+			fileID = generateFileID(file);
+			console.log(fileID)
+			totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+			uploadedChunks = new Set();
+			connectWS();
+
+			// 发送元信息
+			ws.onopen = () => ws.send(JSON.stringify({
+				type: 'meta',
+				payload: {
+					file_id: fileID,
+					file_name: file.name,
+					file_size: file.size,
+					chunk_size: CHUNK_SIZE,
+					total_chunks: totalChunks
+				}
+			}));
+		}
+
+		// 上传下一个分片
+		function uploadNextChunk() {
+			// 找到第一个未上传的分片
+			let nextIdx = -1;
+			for (let i = 0; i < totalChunks; i++) {
+				if (!uploadedChunks.has(i)) {
+					nextIdx = i;
+					break;
+				}
+			}
+
+			if (nextIdx === -1) {
+				console.log('All chunks uploaded');
+				return; // 所有分片上传完成
+			}
+
+			// 读取分片数据
+			const start = nextIdx * CHUNK_SIZE;
+			const end = Math.min(start + CHUNK_SIZE, file.size);
+			const chunk = file.slice(start, end);
+
+			// 转换为Base64发送（二进制在JSON中需编码）
+			const reader = new FileReader();
+			reader.onload = (e) => {
+				console.log(e)
+				const base64Data = e.target.result.split(',')[1]; // 移除dataURL前缀
+				console.log(base64Data)
+				ws.send(JSON.stringify({
+					type: 'chunk',
+					payload: {
+						file_id: fileID,
+						chunk_index: nextIdx,
+						data: base64Data
+					}
+				}));
+			};
+			reader.readAsDataURL(chunk);
+		}
+	</script>
+</body>
+</html>
