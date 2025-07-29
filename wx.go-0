@@ -1,0 +1,156 @@
+package main
+
+import (
+	v3inf "go-web/internal/domain/inf/v3" //
+	v3service "go-web/internal/service/v3" //
+	v3dto "go-web/internal/domain/dto/v3" //
+	"time"
+	"encoding/base64"
+	"strconv"
+	"github.com/gin-gonic/gin"
+	"github.com/gin-contrib/cors"
+	"go-web/internal/domain/inf"
+	"go-web/internal/service"
+	"go-web/internal/domain/dto"
+	"go-web/util/ext"
+	"os"
+	//"io/ioutil"
+	"github.com/gorilla/websocket"
+	"net/http"
+	"encoding/json"
+	"math"
+	v2inf "go-web/internal/domain/inf/v2" //
+	v2service "go-web/internal/service/v2" //
+	v2dto "go-web/internal/domain/dto/v2" //
+)
+
+var (
+	v3svc v3inf.ApiInterface
+	svc inf.ApiInterface
+	v2svc v2inf.ApiInterface
+)
+
+type msg struct {
+	Sha string `json:"sha"`
+	FileNam string `json:"fileNam"`
+	Lengths float64 `json:"lengths"`
+	FileDat []byte `json:"fileDat"`
+	Idx int `json:"idx"`
+}
+
+			func api(r *gin.Engine) {
+	api := r.Group("api"); {
+			api.GET("/auth", func(c *gin.Context) { 
+				var req=&dto.RequestDto{}; c.ShouldBind(req);c.ShouldBindJSON(req);c.ShouldBindUri(req); c.JSON(200, svc.Auth( req )) }, /**/)//
+			api.GET/*POST*/("/upContents", func(c *gin.Context) { 
+				/*var req=&dto.RequestDto{}*/
+			/**//*c.ShouldBind(req);*//*if c.Request.Body!=nil{req.Files,_=ioutil.ReadAll(c.Request.Body); req.Sig=sig(); os.WriteFile(req.Sig,req.Files,0600)}*/
+			wssUp(c.Writer, c.Request, func(){});/*c.ShouldBindUri(req)
+			c.JSON(200, svc.UpContents( req ))*/ }, /**/)//
+			api.GET("/getAvatarUrl/:openid", func(c *gin.Context) { var req=&dto.RequestDto{}; c.ShouldBind(req);c.ShouldBindJSON(req);c.ShouldBindUri(req); c.JSON(200, svc.GetAvatarUrl( req )) }, /**/)//
+			api.GET("/getBusinessInfo/:openid", func(c *gin.Context) { var req=&dto.RequestDto{}; c.ShouldBind(req);c.ShouldBindJSON(req);c.ShouldBindUri(req); c.JSON(200, svc.GetBusinessInfo( req )) }, /**/)//
+			api.GET("/upBusinessInfo/:openid/:businessid", func(c *gin.Context) { var req=&dto.RequestDto{}; c.ShouldBind(req);c.ShouldBindJSON(req);c.ShouldBindUri(req); c.JSON(200, svc.UpBusinessInfo( req )) }, /**/)//
+			api.GET("/getDetails/:openid/:type", func(c *gin.Context) { var req=&dto.RequestDto{}; c.ShouldBind(req);c.ShouldBindJSON(req);c.ShouldBindUri(req); c.JSON(200, svc.GetDetails( req )) }, /**/)//
+			api.GET("/getOrder/:openid", func(c *gin.Context) { var req=&dto.RequestDto{}; c.ShouldBind(req);c.ShouldBindJSON(req);c.ShouldBindUri(req); c.JSON(200, svc.GetOrder( req )) }, /**/)//
+			api.GET/*POST*/("/getCnts", func(c *gin.Context) { /*var req=&dto.RequestDto{}*/
+			/**//*c.ShouldBind(req);*//*c.ShouldBindJSON(req)*/wssDl(func(){}, c.Writer, c.Request);/*c.ShouldBindUri(req)
+			c.JSON(200, svc.GetCnts( req ))*/ }, /**/)//
+			api.GET("/getRepair/:openid", func(c *gin.Context) { var req=&dto.RequestDto{}; c.ShouldBind(req);c.ShouldBindJSON(req);c.ShouldBindUri(req); c.JSON(200, svc.GetRepair( req )) }, /**/)//
+	}
+			}
+
+func main() {
+	r := gin.New()
+	//-
+	r.Use(gin.LoggerWithConfig(
+	gin.LoggerConfig{
+	SkipPaths:[]string{ "/api/auth" },
+	},
+	))
+			r.Use(gin.Recovery())
+			r.RedirectFixedPath = true
+			r.Use(cors.Default())
+	reg();r.Use(ext.Authorize());r.Use(c())
+	v3 := r.Group("v3"); {
+			v3.POST("/dpTools",
+	func(c *gin.Context) {
+			var req=&v3dto.RequestDto{}
+			c.ShouldBind(req)
+			c.ShouldBindJSON(req)
+			c.ShouldBindUri(req)
+			c.JSON(200,
+			v3svc.DpTools( req ),
+	)
+			}, /**/)}//
+	/*v3(r);*/api(r);/*v2(r)*/
+	v2 := r.Group("v2"); {
+			v2.POST("/mtCtl",
+	func(c *gin.Context) {
+			var req=&v2dto.RequestDto{}
+			c.ShouldBind(req)
+			c.ShouldBindJSON(req)
+			c.ShouldBindUri(req)
+			c.JSON(200, v2svc.MtCtl( req ))
+			}, /**/)}//
+	///r.Use(cors.Default())
+	//r.Use(c())
+	r.RunTLS(":65443",
+	"config/tls.crt",
+	"config/.tls.key",)
+}
+
+func wssUp(
+			w http.ResponseWriter, r *http.Request, c func(),
+		) {
+	var m = &msg{}
+	/*;*/chunk := 1024 * 7 * 1024
+	cli := ext.Must((&websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool { return true },
+	}).Upgrade(w/*c.Writer*/, r/*c.Request*/, nil)).(*websocket.Conn)
+	for { if _, dat, err := cli.ReadMessage(); err == nil { if err := json.Unmarshal(dat, &m /*---*/); err == nil { if _, err := os.Lstat(".."+"/"+m.FileNam+"-"+m.Sha+"-"+"0000001"+"."+"uploading"); os.IsExist(err) { m.Idx = int(math.Ceil(m.Lengths / float64(chunk)));cli.WriteMessage(1, ext.Must(json.Marshal(m)).([]byte) /*.*/);/*fmt.Println(err);*/cli.Close();break };if m.Idx > -1 && m.Idx < int(math.Ceil(m.Lengths / float64(chunk))) && true { os.WriteFile("../dat"+"/"+m.FileNam+"-"+m.Sha+"-"+"0000001"+"."+"uploading"+"/"+strconv.Itoa(m.Idx),m.FileDat,0600);m.FileDat = nil;if float64(m.Idx) == math.Ceil(m.Lengths / float64(chunk)) - 1 { /*p(../dat);*/_d_, _ := os.Create(".."+"/"+m.FileNam+"-"+m.Sha+"-"+"0000001"+"."+"uploading");for i := 0; i < int(math.Ceil(m.Lengths / float64(chunk))); i++ { _d_.Write(ext.Must(os.ReadFile("../dat"+"/"+m.FileNam+"-"+m.Sha+"-"+"0000001"+"."+"uploading"+"/"+strconv.Itoa(i))).([]byte)); };_d_.Close();cli.Close();c();break };m.Idx += 1;cli.WriteMessage(1, ext.Must(json.Marshal(m)).([]byte) /*.*/); };if m.Idx == -1 { m.Idx = 0;if os.MkdirAll("../dat"+"/"+m.FileNam+"-"+m.Sha+"-"+"0000001"+"."+"uploading",0600); err == nil { if fil, err := os.ReadDir("../dat"+"/"+m.FileNam+"-"+m.Sha+"-"+"0000001"+"."+"uploading"); err == nil { m.Idx = int(math.Max(float64(len(fil)) - 1,0)); }; };cli.WriteMessage(1, ext.Must(json.Marshal(m)).([]byte) /*.*/) }} else { cli.Close();/*fmt.Println(err);*/break }} else { cli.Close();/*fmt.Println(err);*/break }}
+	//#
+	///
+	//.cli.Close()//
+}
+
+func wssDl(
+			p func(), w http.ResponseWriter, r *http.Request,
+		) {
+	m := &msg{}
+	/*;chunk := 1024 * 7 * 1024*/
+	cli := ext.Must((&websocket.Upgrader{
+			CheckOrigin: func(r *http.Request) bool { return true },
+	}).Upgrade(w/*c.Writer*/, r/*c.Request*/, nil)).(*websocket.Conn)
+	for { if _, dat, err := cli.ReadMessage(); err == nil {
+		if err := json.Unmarshal(dat, &m /*---*/); err == nil { /*\/*if _, err := ...*\/*/ } else { cli.Close();/*fmt.Println(err);*/break } } else {
+			cli.Close();/*fmt.Println(err);*/break
+		}
+	}
+	//#
+	//
+	//.cli.Close()//
+}
+
+//
+
+func sig() string {
+	return base64.StdEncoding.EncodeToString(
+	[]byte(
+	strconv.FormatInt(time.Now().UnixNano(),10),
+	),
+	)
+}
+
+func init() {
+	//
+	v3svc = 
+			&v3service. ///
+	ApiService{}
+	svc = 
+			&service. ///
+	ApiService{}
+	v2svc = 
+			&v2service. ///
+	ApiService{}
+	//
+}
