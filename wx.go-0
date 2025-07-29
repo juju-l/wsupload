@@ -40,12 +40,9 @@ type msg struct {
 
 			func api(r *gin.Engine) {
 	api := r.Group("api"); {
-			api.GET("/auth", func(c *gin.Context) { 
-				var req=&dto.RequestDto{}; c.ShouldBind(req);c.ShouldBindJSON(req);c.ShouldBindUri(req); c.JSON(200, svc.Auth( req )) }, /**/)//
-			api.GET/*POST*/("/upContents", func(c *gin.Context) { 
-				/*var req=&dto.RequestDto{}*/
-			/**//*c.ShouldBind(req);*//*if c.Request.Body!=nil{req.Files,_=ioutil.ReadAll(c.Request.Body); req.Sig=sig(); os.WriteFile(req.Sig,req.Files,0600)}*/
-			wssUp(c.Writer, c.Request, func(){});/*c.ShouldBindUri(req)
+			api.GET("/auth", func(c *gin.Context) { var req=&dto.RequestDto{}; c.ShouldBind(req);c.ShouldBindJSON(req);c.ShouldBindUri(req); c.JSON(200, svc.Auth( req )) }, /**/)//
+			api.GET/*POST*/("/upContents", func(c *gin.Context) { /*var req=&dto.RequestDto{}*/
+			/**//*c.ShouldBind(req);*//*if c.Request.Body!=nil{req.Files,_=ioutil.ReadAll(c.Request.Body); req.Sig=sig(); os.WriteFile(req.Sig,req.Files,0600)}*/wssUp(c.Writer, c.Request, func(){});/*c.ShouldBindUri(req)
 			c.JSON(200, svc.UpContents( req ))*/ }, /**/)//
 			api.GET("/getAvatarUrl/:openid", func(c *gin.Context) { var req=&dto.RequestDto{}; c.ShouldBind(req);c.ShouldBindJSON(req);c.ShouldBindUri(req); c.JSON(200, svc.GetAvatarUrl( req )) }, /**/)//
 			api.GET("/getBusinessInfo/:openid", func(c *gin.Context) { var req=&dto.RequestDto{}; c.ShouldBind(req);c.ShouldBindJSON(req);c.ShouldBindUri(req); c.JSON(200, svc.GetBusinessInfo( req )) }, /**/)//
